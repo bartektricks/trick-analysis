@@ -3,18 +3,7 @@ import { FFmpeg, type FileData, type ProgressEvent } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import { onDestroy, onMount } from 'svelte';
 import { v7 as uuid7 } from 'uuid';
-
-let ffmpegInstance: FFmpeg | null = null;
-
-async function getFFmpegInstance(): Promise<FFmpeg> {
-	if (ffmpegInstance) {
-		return ffmpegInstance;
-	}
-
-	ffmpegInstance = await loadFFmpeg();
-
-	return ffmpegInstance;
-}
+import { z } from 'zod/v4';
 
 async function loadFFmpeg(): Promise<FFmpeg> {
 	const ffmpeg = new FFmpeg();
@@ -27,6 +16,27 @@ async function loadFFmpeg(): Promise<FFmpeg> {
 	return ffmpeg;
 }
 
+const MetadataSchema = z.object({
+	streams: z.array(
+		z.object({
+			r_frame_rate: z
+				.string()
+				.refine((val) => val.includes('/'), {
+					message: 'Invalid frame rate format, expected "numerator/denominator".'
+				})
+				.transform((val) => {
+					const [numerator, denominator] = val.split('/').map(Number);
+
+					if (denominator === 0) {
+						return 0; // Avoid division by zero
+					}
+
+					return numerator / denominator;
+				})
+		})
+	)
+});
+
 export class Video {
 	canvas!: HTMLCanvasElement;
 	ctx!: CanvasRenderingContext2D;
@@ -35,39 +45,30 @@ export class Video {
 	ffmpeg = $state<FFmpeg>();
 	loadingProgress = $state(0);
 	totalFrames = $state(0);
-	frames = $state<FileData[]>([]);
+	isLoading = $state(false);
+	#frames = $state<FileData[]>([]);
+	#isPlaying = $state(false);
+	#currentFrameIndex = $state(0);
+	#frameRate = $state(30); // Default frame rate
+	#intervalId = $state<number | null>(null);
 
 	constructor() {
-		onMount(async () => {
-			if (!this.canvas) {
-				throw new Error(
-					'Canvas element is not defined. Please set the canvas element before using Video class.'
-				);
-			}
-
-			const context = this.canvas.getContext('2d');
-			if (!context) {
-				throw new Error('Failed to get 2D context from canvas.');
-			}
-
-			this.ctx = context;
-			this.ffmpeg = await getFFmpegInstance();
-			this.ffmpeg.on('progress', this.handleProgress);
-		});
+		onMount(async () => {});
 
 		onDestroy(() => {
-			this.ffmpeg?.off('progress', this.handleProgress);
+			// run in background to avoid blocking the UI
+			this.cleanup();
 		});
 	}
 
-	private handleProgress = ({ progress, time }: ProgressEvent) => {
-		this.loadingProgress = 10;
-		this.loadingProgress = Math.round(progress * 100);
-		console.log(`Progress: ${this.loadingProgress}% | Time: ${time}`);
+	private handleProgress = ({ progress }: ProgressEvent) => {
+		// It sometimes goes over 1, so we cap it at 100
+		this.loadingProgress = Math.min(Math.round(progress * 100), 100);
+		this.isLoading = this.loadingProgress < 100;
 	};
 
 	private getRelativePath(fileName: string): string {
-		return `/${this.id}/${fileName}`;
+		return `${this.id}/${fileName}`;
 	}
 
 	async loadFile(file?: File): Promise<void> {
@@ -77,21 +78,86 @@ export class Video {
 		const dir = this.getRelativePath('');
 
 		await this.ffmpeg.createDir(dir);
-
 		await this.ffmpeg.writeFile(inputPath, await fetchFile(file));
 
-		await this.ffmpeg.exec(['-i', inputPath, this.getRelativePath('frame_%04d.png')]);
+		const frameRatePath = this.getRelativePath('framerate.json');
+		await Promise.all([
+			this.ffmpeg.ffprobe([
+				inputPath,
+				'-v',
+				'quiet',
+				'-show_entries',
+				'stream=r_frame_rate',
+				'-output_format',
+				'json',
+				'-o',
+				frameRatePath
+			]),
+			this.ffmpeg.exec(['-i', inputPath, this.getRelativePath('frame_%04d.png')])
+		]);
+
+		try {
+			const videoMetadata = await this.ffmpeg.readFile(frameRatePath);
+
+			const decodedVideoMetadata =
+				typeof videoMetadata === 'string' ? videoMetadata : new TextDecoder().decode(videoMetadata);
+
+			const parsedMetadata = await MetadataSchema.parseAsync(JSON.parse(decodedVideoMetadata));
+
+			this.#frameRate = parsedMetadata.streams.map((stream) => stream.r_frame_rate).sort()[0] || 30; // Default to 30 if no valid frame rate found
+		} catch {
+			console.log('Failed to parse video metadata, using default frame rate of 30.');
+		}
 
 		const files = await this.ffmpeg.listDir(dir);
+		const frameFiles = files.filter((file) => file.name.startsWith('frame_'));
 
-		this.totalFrames = files.filter((file) => file.name.startsWith('frame_')).length;
+		this.totalFrames = frameFiles.length;
 
-		for (let i = 1; i <= this.totalFrames; i++) {
-			const data = await this.ffmpeg.readFile(
-				this.getRelativePath(`frame_${i.toString().padStart(4, '0')}.png`)
+		const ffmpeg = this.ffmpeg;
+		const asyncFrames = frameFiles.map(({ name }) => ffmpeg.readFile(this.getRelativePath(name)));
+
+		this.#frames = await Promise.all(asyncFrames);
+	}
+
+	async initialize(): Promise<void> {
+		if (!this.canvas) {
+			throw new Error(
+				'Canvas element is not defined. Please set the canvas element before using Video class.'
 			);
-			this.frames.push(data);
 		}
+
+		const context = this.canvas.getContext('2d');
+		if (!context) {
+			throw new Error('Failed to get 2D context from canvas.');
+		}
+
+		this.ctx = context;
+		// 2 instances to handle multiple progress events at once
+		this.ffmpeg = await loadFFmpeg();
+		this.ffmpeg.on('progress', this.handleProgress);
+		this.ffmpeg.on('log', ({ message, type }) => {
+			console.log(`FFmpeg log: ${message}, type: ${type}`);
+		});
+	}
+
+	async cleanup(): Promise<void> {
+		if (!this.ffmpeg) return;
+
+		this.ffmpeg.off('progress', this.handleProgress);
+
+		const dir = this.getRelativePath('');
+		await this.ffmpeg.deleteDir(dir);
+
+		this.#frames = [];
+		this.totalFrames = 0;
+		this.loadingProgress = 0;
+		this.#isPlaying = false;
+		this.#currentFrameIndex = 0;
+
+		this.stopPlayback();
+
+		this.ffmpeg.terminate();
 	}
 
 	async renderFrame(frame: FileData): Promise<void> {
@@ -114,20 +180,62 @@ export class Video {
 		});
 	}
 
-	async playFrames(frames: FileData[]): Promise<void> {
-		if (!this.ctx || !frames.length) return;
+	async renderFrameByIndex(index: number): Promise<void> {
+		if (this.#frames.length <= 0) return;
 
-		const frameDelay = 1000 / 24; // frame delay for 24 FPS in milliseconds
+		this.#currentFrameIndex = index;
+		await this.renderFrame(this.#frames[index]);
+	}
 
-		for (let i = 0; i < frames.length; i++) {
-			const start = performance.now();
+	async playFrames(): Promise<void> {
+		if (!this.#frames.length || this.#isPlaying) return;
 
-			await this.renderFrame(frames[i]);
+		this.#isPlaying = true;
+		const frameInterval = 1000 / this.#frameRate; // milliseconds per frame
 
-			const elapsed = performance.now() - start;
-			const delay = Math.max(0, frameDelay - elapsed);
+		this.#intervalId = setInterval(async () => {
+			await this.renderFrameByIndex(this.#currentFrameIndex);
+			this.#currentFrameIndex++;
 
-			await new Promise((resolve) => setTimeout(resolve, delay));
+			if (this.#currentFrameIndex >= this.#frames.length - 1) {
+				this.stopPlayback();
+				return;
+			}
+		}, frameInterval);
+	}
+
+	async renderNextFrame(): Promise<void> {
+		if (this.#isPlaying || this.#currentFrameIndex >= this.#frames.length - 1) return;
+
+		console.log(`Rendering next frame: ${this.#currentFrameIndex + 1}`);
+		this.#currentFrameIndex++;
+		await this.renderFrameByIndex(this.#currentFrameIndex);
+	}
+
+	async renderPreviousFrame(): Promise<void> {
+		if (this.#isPlaying || this.#currentFrameIndex <= 0) return;
+
+		console.log(`Rendering previous frame: ${this.#currentFrameIndex - 1}`);
+		this.#currentFrameIndex--;
+		await this.renderFrameByIndex(this.#currentFrameIndex);
+	}
+
+	stopPlayback(): void {
+		this.#isPlaying = false;
+		if (this.#intervalId) {
+			clearInterval(this.#intervalId);
+			this.#intervalId = null;
+		}
+	}
+
+	getCurrentFrameIndex(): number {
+		return this.#currentFrameIndex;
+	}
+
+	reset(): void {
+		this.#currentFrameIndex = 0;
+		if (this.#frames.length > 0) {
+			this.renderFrameByIndex(0);
 		}
 	}
 }

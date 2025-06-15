@@ -53,10 +53,10 @@ export class Video {
 	#intervalId = $state<number | null>(null);
 
 	constructor() {
-		onMount(async () => {});
-
+		onMount(async () => {
+			await this.initialize();
+		});
 		onDestroy(() => {
-			// run in background to avoid blocking the UI
 			this.cleanup();
 		});
 	}
@@ -142,13 +142,6 @@ export class Video {
 	}
 
 	async cleanup(): Promise<void> {
-		if (!this.ffmpeg) return;
-
-		this.ffmpeg.off('progress', this.handleProgress);
-
-		const dir = this.getRelativePath('');
-		await this.ffmpeg.deleteDir(dir);
-
 		this.#frames = [];
 		this.totalFrames = 0;
 		this.loadingProgress = 0;
@@ -157,7 +150,12 @@ export class Video {
 
 		this.stopPlayback();
 
-		this.ffmpeg.terminate();
+		this.ffmpeg?.off('progress', this.handleProgress);
+
+		const dir = this.getRelativePath('');
+		await this.ffmpeg?.deleteDir(dir);
+
+		this.ffmpeg?.terminate();
 	}
 
 	async renderFrame(frame: FileData): Promise<void> {

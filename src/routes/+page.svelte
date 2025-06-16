@@ -49,8 +49,8 @@
 		const value = e.currentTarget.valueAsNumber;
 
 		await Promise.all([
-			videoInstance.renderFrameByIndex(value),
-			videoInstance2.renderFrameByIndex(value)
+			videoInstance.renderFrame(value),
+			videoInstance2.renderFrame(value)
 		]);
 	};
 </script>

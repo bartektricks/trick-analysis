@@ -60,8 +60,13 @@ export class Video {
 	#intervalId = $state<number | null>(null);
 	#frameRatePath = this.getPath('framerate.json');
 	#inputPath = this.getPath('input.mp4');
-	#width = $state(0);
-	#height = $state(0);
+	#frameImages = $state<HTMLImageElement[]>([]);
+	#imagePosition = $state<{ x: number; y: number; width: number; height: number }>({
+		x: 0,
+		y: 0,
+		width: 0,
+		height: 0
+	});
 
 	constructor() {
 		onMount(async () => {
@@ -123,7 +128,28 @@ export class Video {
 		const asyncFrames = frameFiles.map(({ name }) => ffmpeg.readFile(this.getPath(name)));
 
 		this.#frames = await Promise.all(asyncFrames);
-		await this.renderFrameByIndex(0);
+
+		await this.preloadImages();
+		await this.renderFrame(0);
+	}
+
+	private async preloadImages(): Promise<void> {
+		const imagePromises = this.#frames.map((frame) => {
+			return new Promise<HTMLImageElement>((resolve, reject) => {
+				const img = new Image();
+				const imgUrl = URL.createObjectURL(new Blob([frame], { type: 'image/jpeg' }));
+
+				img.onload = () => {
+					URL.revokeObjectURL(imgUrl); // Clean up immediately after loading
+					resolve(img);
+				};
+
+				img.onerror = reject;
+				img.src = imgUrl;
+			});
+		});
+
+		this.#frameImages = await Promise.all(imagePromises);
 	}
 
 	async initialize(): Promise<void> {
@@ -186,37 +212,30 @@ export class Video {
 			const parsedMetadata = await MetadataSchema.parseAsync(JSON.parse(decodedVideoMetadata));
 
 			this.#frameRate = parsedMetadata.streams.map((stream) => stream.r_frame_rate).sort()[0] || 30; // Default to 30 if no valid frame rate found
-			this.#width = parsedMetadata.streams[0].width;
-			this.#height = parsedMetadata.streams[0].height;
+
+			this.setImagePosition(parsedMetadata.streams[0].width, parsedMetadata.streams[0].height);
 		} catch {
 			console.log('Failed to parse video metadata, using default frame rate of 30.');
 		}
 	}
 
-	async renderFrame(frame: FileData): Promise<void> {
-		const img = new Image();
+	async renderFrame(index: number): Promise<void> {
+		if (index >= this.#frameImages.length || index < 0) return;
 
-		const imgUrl = URL.createObjectURL(new Blob([frame], { type: 'image/jpeg' }));
+		const img = this.#frameImages[index];
 
-		const { width, height } = this.getImagPosition();
+		if (!img) return;
 
-		return new Promise<void>((resolve, reject) => {
-			img.onload = () => {
-				this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-				this.ctx.drawImage(img, 0, 0, width, height);
-				URL.revokeObjectURL(imgUrl);
-				resolve();
-			};
+		const { x, y, width, height } = this.#imagePosition;
 
-			img.onerror = reject;
-			img.src = imgUrl;
-		});
+		this.ctx.clearRect(x, y, width, height); // Clear the canvas area where the image will be drawn
+		this.ctx.drawImage(img, x, y, width, height);
 	}
 
-	private getImagPosition(): { width: number; height: number } {
+	private setImagePosition(videoWidth: number, videoHeight: number): void {
 		const canvasWidth = this.canvas.clientWidth;
 		const canvasHeight = this.canvas.clientHeight;
-		const aspectRatio = this.#width / this.#height;
+		const aspectRatio = videoWidth / videoHeight;
 
 		let width = canvasWidth;
 		let height = canvasHeight;
@@ -231,14 +250,12 @@ export class Video {
 			width = canvasWidth * aspectRatio;
 		}
 
-		return { width, height };
-	}
-
-	async renderFrameByIndex(index: number): Promise<void> {
-		if (this.#frames.length <= 0 || this.#frames.length < index) return;
-
-		this.#currentFrameIndex = index;
-		await this.renderFrame(this.#frames[index]);
+		this.#imagePosition = {
+			x: (canvasWidth - width) / 2,
+			y: (canvasHeight - height) / 2,
+			width,
+			height
+		};
 	}
 
 	async playFrames(): Promise<void> {
@@ -248,7 +265,7 @@ export class Video {
 		const frameInterval = 1000 / this.#frameRate; // milliseconds per frame
 
 		this.#intervalId = setInterval(async () => {
-			await this.renderFrameByIndex(this.#currentFrameIndex);
+			await this.renderFrame(this.#currentFrameIndex);
 			this.#currentFrameIndex++;
 
 			if (this.#currentFrameIndex >= this.#frames.length - 1) {
@@ -262,14 +279,14 @@ export class Video {
 		if (this.#isPlaying || this.#currentFrameIndex >= this.#frames.length - 1) return;
 
 		this.#currentFrameIndex++;
-		await this.renderFrameByIndex(this.#currentFrameIndex);
+		await this.renderFrame(this.#currentFrameIndex);
 	}
 
 	async renderPreviousFrame(): Promise<void> {
 		if (this.#isPlaying || this.#currentFrameIndex <= 0) return;
 
 		this.#currentFrameIndex--;
-		await this.renderFrameByIndex(this.#currentFrameIndex);
+		await this.renderFrame(this.#currentFrameIndex);
 	}
 
 	stopPlayback(): void {
@@ -287,7 +304,7 @@ export class Video {
 	reset(): void {
 		this.#currentFrameIndex = 0;
 		if (this.#frames.length > 0) {
-			this.renderFrameByIndex(0);
+			this.renderFrame(0);
 		}
 	}
 }

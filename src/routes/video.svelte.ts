@@ -51,6 +51,8 @@ export class Video {
 	#currentFrameIndex = $state(0);
 	#frameRate = $state(30); // Default frame rate
 	#intervalId = $state<number | null>(null);
+	#frameRatePath = this.getRelativePath('framerate.json');
+	#inputPath = this.getRelativePath('input.mp4');
 
 	constructor() {
 		onMount(async () => {
@@ -74,16 +76,14 @@ export class Video {
 	async loadFile(file?: File): Promise<void> {
 		if (!this.ffmpeg || !file) return;
 
-		const inputPath = this.getRelativePath('input.mp4');
 		const dir = this.getRelativePath('');
 
 		await this.ffmpeg.createDir(dir);
-		await this.ffmpeg.writeFile(inputPath, await fetchFile(file));
+		await this.ffmpeg.writeFile(this.#inputPath, await fetchFile(file));
 
-		const frameRatePath = this.getRelativePath('framerate.json');
 		await Promise.all([
 			this.ffmpeg.ffprobe([
-				inputPath,
+				this.#inputPath,
 				'-v',
 				'quiet',
 				'-show_entries',
@@ -91,23 +91,12 @@ export class Video {
 				'-output_format',
 				'json',
 				'-o',
-				frameRatePath
+				this.#frameRatePath
 			]),
-			this.ffmpeg.exec(['-i', inputPath, this.getRelativePath('frame_%04d.png')])
+			this.ffmpeg.exec(['-i', this.#inputPath, this.getRelativePath('frame_%04d.png')])
 		]);
 
-		try {
-			const videoMetadata = await this.ffmpeg.readFile(frameRatePath);
-
-			const decodedVideoMetadata =
-				typeof videoMetadata === 'string' ? videoMetadata : new TextDecoder().decode(videoMetadata);
-
-			const parsedMetadata = await MetadataSchema.parseAsync(JSON.parse(decodedVideoMetadata));
-
-			this.#frameRate = parsedMetadata.streams.map((stream) => stream.r_frame_rate).sort()[0] || 30; // Default to 30 if no valid frame rate found
-		} catch {
-			console.log('Failed to parse video metadata, using default frame rate of 30.');
-		}
+		await this.updateFramerate();
 
 		const files = await this.ffmpeg.listDir(dir);
 		const frameFiles = files.filter((file) => file.name.startsWith('frame_'));
@@ -150,12 +139,30 @@ export class Video {
 
 		this.stopPlayback();
 
-		this.ffmpeg?.off('progress', this.handleProgress);
+		if (!this.ffmpeg) return;
+		this.ffmpeg.off('progress', this.handleProgress);
 
 		const dir = this.getRelativePath('');
-		await this.ffmpeg?.deleteDir(dir);
+		await this.ffmpeg.deleteDir(dir);
 
-		this.ffmpeg?.terminate();
+		this.ffmpeg.terminate();
+	}
+
+	async updateFramerate(): Promise<void> {
+		if (!this.ffmpeg) return;
+
+		try {
+			const videoMetadata = await this.ffmpeg.readFile(this.#frameRatePath);
+
+			const decodedVideoMetadata =
+				typeof videoMetadata === 'string' ? videoMetadata : new TextDecoder().decode(videoMetadata);
+
+			const parsedMetadata = await MetadataSchema.parseAsync(JSON.parse(decodedVideoMetadata));
+
+			this.#frameRate = parsedMetadata.streams.map((stream) => stream.r_frame_rate).sort()[0] || 30; // Default to 30 if no valid frame rate found
+		} catch {
+			console.log('Failed to parse video metadata, using default frame rate of 30.');
+		}
 	}
 
 	async renderFrame(frame: FileData): Promise<void> {

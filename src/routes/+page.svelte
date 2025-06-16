@@ -65,8 +65,7 @@
 				onchange={(e) => (videoFile = e.currentTarget.files?.[0])}
 			/>
 		</label>
-		<canvas class="bg-fuchsia-100" bind:this={videoInstance.canvas} width="640" height="480"
-		></canvas>
+		<canvas class="h-screen w-full bg-fuchsia-100" bind:this={videoInstance.canvas}></canvas>
 	</div>
 
 	<div class="grid justify-items-center">
@@ -78,14 +77,13 @@
 				onchange={(e) => (videoFile2 = e.currentTarget.files?.[0])}
 			/>
 		</label>
-		<canvas class="bg-amber-100" bind:this={videoInstance2.canvas} width="640" height="480"
-		></canvas>
+		<canvas class="h-screen w-full bg-amber-100" bind:this={videoInstance2.canvas}></canvas>
 	</div>
 </div>
 
 <div
 	role="progressbar"
-	class="flex h-4 w-full max-w-5xl items-center overflow-hidden rounded-md bg-gray-100"
+	class="mx-auto my-6 flex h-4 w-full max-w-5xl items-center overflow-hidden rounded-md bg-gray-100"
 	aria-labelledby="loading-progress"
 >
 	<span

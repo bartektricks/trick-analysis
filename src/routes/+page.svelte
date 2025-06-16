@@ -65,7 +65,7 @@
 				onchange={(e) => (videoFile = e.currentTarget.files?.[0])}
 			/>
 		</label>
-		<canvas class="h-screen w-full bg-fuchsia-100" bind:this={videoInstance.canvas}></canvas>
+		<canvas class="block h-screen w-full bg-fuchsia-100" bind:this={videoInstance.canvas}></canvas>
 	</div>
 
 	<div class="grid justify-items-center">
@@ -77,7 +77,7 @@
 				onchange={(e) => (videoFile2 = e.currentTarget.files?.[0])}
 			/>
 		</label>
-		<canvas class="h-screen w-full bg-amber-100" bind:this={videoInstance2.canvas}></canvas>
+		<canvas class="block h-screen w-full bg-amber-100" bind:this={videoInstance2.canvas}></canvas>
 	</div>
 </div>
 
@@ -99,7 +99,7 @@
 	type="range"
 	value={currentFrame}
 	min="0"
-	max={Math.min(videoInstance.totalFrames, videoInstance2.totalFrames)}
+	max={Math.max(videoInstance.totalFrames, videoInstance2.totalFrames)}
 	oninput={handleRangeInput}
 	disabled={!videoFile ||
 		!videoFile2 ||

@@ -17,10 +17,8 @@
 	const getTimeByFrame = (frame: number) => {
 		return frame / vidInstance.frameRate;
 	};
-</script>
 
-<svelte:window
-	onkeydown={(e) => {
+	const handleKeydown = (e: KeyboardEvent) => {
 		if (!video) return;
 		if (e.shiftKey) {
 			e.preventDefault();
@@ -31,11 +29,13 @@
 		} else if (e.key === 'ArrowLeft') {
 			currentTime -= getTimeByFrame(currentTime);
 		}
-	}}
-/>
+	};
+</script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <div
-	class="relative size-full bg-radial from-gray-900 to-gray-900 text-white transition-colors hover:from-gray-900/95"
+	class="from-background to-background hover:from-background/95 text-foreground relative size-full bg-radial transition-colors"
 >
 	<!-- svelte-ignore a11y_media_has_caption -->
 	<video bind:this={video} src={vidInstance.videoUrl} bind:currentTime class="size-full">
@@ -56,7 +56,7 @@
 	{/if}
 
 	{#if vidInstance.isLoading}
-		<div class="absolute inset-0 flex items-center justify-center bg-gray-800/50">
+		<div class="bg-card absolute inset-0 flex animate-pulse items-center justify-center">
 			Optimizing video...
 		</div>
 	{/if}

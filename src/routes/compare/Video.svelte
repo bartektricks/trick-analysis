@@ -35,7 +35,9 @@
 	};
 </script>
 
-<div class="group/video relative size-full bg-fuchsia-100">
+<div
+	class="relative size-full bg-radial from-gray-900 to-gray-900 text-white transition-colors hover:from-gray-900/95"
+>
 	<!-- svelte-ignore a11y_media_has_caption -->
 	<video
 		bind:this={video}

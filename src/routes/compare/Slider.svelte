@@ -13,10 +13,10 @@
 <Slider.Root
 	{...props}
 	class={cn(
-		'invisible absolute right-0 bottom-0 left-0 z-10 flex h-4 w-full cursor-pointer items-center bg-zinc-900/20 select-none group-hover/video:visible',
+		'absolute right-0 bottom-0 left-0 z-10 mx-3 mb-3 flex h-4 cursor-pointer items-center rounded-2xl bg-zinc-50/20 transition-all select-none hover:h-6',
 		className
 	)}
 >
-	<Slider.Range class="h-1/2 bg-white" />
-	<Slider.Thumb index={0} class="size-4 rounded-full bg-zinc-900" />
+	<Slider.Range class="mx-1.5 h-1/3 rounded-xl bg-white/60" />
+	<Slider.Thumb index={0} class="size-4 rounded-full bg-white/40" />
 </Slider.Root>

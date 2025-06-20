@@ -1,33 +1,35 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import Slider from '../Slider.svelte';
 	import { VideoInstance } from './VideoInstance.svelte';
 
 	interface VideoProps {
-		isTimelineHidden?: boolean;
+		isTimelineLocked?: boolean;
 	}
 
-	let { isTimelineHidden = $bindable(false) }: VideoProps = $props();
-
-	let video = $state<HTMLVideoElement>();
+	let { isTimelineLocked }: VideoProps = $props();
 
 	let vidInstance = new VideoInstance();
-
+	let video = $state<HTMLVideoElement>();
 	let currentTime = $state(0);
+	let timelineValue = $state(0);
+	let previousTimelineValue = $state(0);
 
-	const getTimeByFrame = (frame: number) => {
-		return frame / vidInstance.frameRate;
-	};
 
 	const handleKeydown = (e: KeyboardEvent) => {
 		if (!video) return;
-		if (e.shiftKey) {
-			e.preventDefault();
+		if (!e.shiftKey) {
+			return;
 		}
 
+		e.preventDefault();
+
 		if (e.key === 'ArrowRight') {
-			currentTime += getTimeByFrame(currentTime);
+			currentTime += 1 / vidInstance.frameRate;
+			timelineValue += 1;
 		} else if (e.key === 'ArrowLeft') {
-			currentTime -= getTimeByFrame(currentTime);
+			currentTime -= 1 / vidInstance.frameRate;
+			timelineValue -= 1;
 		}
 	};
 </script>
@@ -61,11 +63,28 @@
 		</div>
 	{/if}
 
-	{#if !isTimelineHidden && vidInstance.videoUrl}
+	{#if !isTimelineLocked && vidInstance.videoUrl}
 		<div class="absolute right-0 bottom-0 left-0 p-4">
 			<Slider
 				type="single"
-				onValueChange={(value) => (currentTime = getTimeByFrame(value))}
+				bind:value={timelineValue}
+				onValueChange={(value) => {
+					// Calculate difference in frames
+					const diff = value - previousTimelineValue;
+
+					if (diff !== 0) {
+						// Apply the same frame-by-frame logic as keydown
+						const steps = Math.abs(diff);
+						const direction = diff > 0 ? 1 : -1;
+
+						// Apply each step individually
+						for (let i = 0; i < steps; i++) {
+							currentTime += direction * (1 / vidInstance.frameRate);
+						}
+
+						previousTimelineValue = value;
+					}
+				}}
 				min={0}
 				max={vidInstance.totalFrames}
 			/>

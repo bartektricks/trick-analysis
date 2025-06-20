@@ -77,11 +77,16 @@ export class VideoInstance {
 		});
 	}
 
-	private getPath(fileName: string): string {
-		return `./${this.#id}/${fileName}`;
-	}
-
-	async loadFile(file?: File): Promise<void> {
+	async loadFile(
+		file?: File,
+		settings?:
+			| {
+					trimFrom: string;
+					trimTo: string;
+					optimize: never;
+			  }
+			| { trimFrom: never; trimTo: never; optimize: boolean }
+	): Promise<void> {
 		if (!this.#ffmpeg || !file) return;
 		this.isLoading = true;
 
@@ -91,7 +96,7 @@ export class VideoInstance {
 		this.#inputPath = this.getPath(file.name);
 		await this.#ffmpeg.writeFile(this.#inputPath, await fetchFile(file));
 
-		await Promise.all([
+		const promiseArr = [
 			this.#ffmpeg.ffprobe([
 				'-v',
 				'quiet',
@@ -103,33 +108,48 @@ export class VideoInstance {
 				this.#inputPath,
 				'-o',
 				this.#frameRatePath
-			]),
-			this.#ffmpeg.exec([
-				'-i',
-				this.#inputPath,
-				'-movflags',
-				'faststart',
-				'-vcodec',
-				'libx264',
-				'-crf',
-				'23',
-				'-g',
-				'1',
-				'-pix_fmt',
-				'yuv420p',
-				this.getPath('output.mp4')
 			])
-		]);
+		];
 
+		const trimCmd = settings?.trimFrom ? ['-ss', settings.trimFrom, '-t', settings.trimTo] : [];
+
+		const outputPath = this.getPath('output.mp4');
+		if (settings) {
+			promiseArr.push(
+				this.#ffmpeg.exec([
+					'-i',
+					this.#inputPath,
+					'-movflags',
+					'faststart',
+					'-vcodec',
+					'libx264',
+					'-crf',
+					'23',
+					'-g',
+					'1',
+					'-pix_fmt',
+					'yuv420p',
+					...trimCmd,
+					outputPath
+				])
+			);
+		}
+
+		await Promise.all(promiseArr);
 		await this.updateMetadata();
 
-		const data = await this.#ffmpeg.readFile(this.getPath('output.mp4'));
+		const filePath = settings ? outputPath : this.#inputPath;
+		const data = await this.#ffmpeg.readFile(filePath);
 		const videoBlob = new Blob([data], { type: 'video/mp4' });
 		this.videoUrl = URL.createObjectURL(videoBlob);
 		this.isLoading = false;
 	}
 
-	async cleanup(): Promise<void> {
+	private getPath(fileName: string): string {
+		return `./${this.#id}/${fileName}`;
+	}
+
+	private async cleanup(): Promise<void> {
 		try {
 			this.#ffmpeg?.terminate();
 		} catch {
@@ -137,7 +157,7 @@ export class VideoInstance {
 		}
 	}
 
-	async updateMetadata(): Promise<void> {
+	private async updateMetadata(): Promise<void> {
 		if (!this.#ffmpeg) return;
 
 		try {
@@ -152,7 +172,7 @@ export class VideoInstance {
 			this.totalFrames = parsedMetadata.streams.map((stream) => stream.nb_frames).sort()[0] || 0;
 		} catch (e) {
 			console.log(e);
-			console.log('Failed to parse video metadata, using default frame rate of 30.');
+			console.log('Failed to parse video metadata. Falling back to default values.');
 		}
 	}
 }

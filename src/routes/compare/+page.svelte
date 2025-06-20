@@ -2,7 +2,7 @@
 	import Slider from './Slider.svelte';
 	import Video from './Video.svelte';
 
-	let areTimelinesLocked = true;
+	let areTimelinesLocked = false;
 </script>
 
 <aside></aside>

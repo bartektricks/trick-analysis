@@ -1,4 +1,4 @@
-import { loadFFmpeg } from '$lib/ffmpeg';
+import { loadFFmpeg } from '$lib/ffmpeg.svelte';
 import { VideoMetadataSchema } from '$lib/schemas/VideoMetadataSchema';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
@@ -9,9 +9,7 @@ export class VideoInstance {
 	totalFrames = $state(0);
 	isLoading = $state(false);
 	frameRate = $state(30); // Default frame rate
-	currentFrameIndex = $state(0);
 	videoUrl = $state<string | null>(null);
-	isInitialized = $state(false);
 
 	#id = uuid7();
 	#ffmpeg = $state<FFmpeg>();
@@ -22,7 +20,6 @@ export class VideoInstance {
 		onMount(() => {
 			(async () => {
 				this.#ffmpeg = await loadFFmpeg();
-				this.isInitialized = true;
 
 				this.#ffmpeg.on('progress', ({ progress }) => {
 					console.log(`${this.#id} - Progress: ${progress}%`);
@@ -110,11 +107,7 @@ export class VideoInstance {
 	}
 
 	private async cleanup(): Promise<void> {
-		try {
-			this.#ffmpeg?.terminate();
-		} catch {
-			// Ignore errors during termination
-		}
+		this.#ffmpeg?.deleteDir(this.getPath(''));
 	}
 
 	private async updateMetadata(): Promise<void> {

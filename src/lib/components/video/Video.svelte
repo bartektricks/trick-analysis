@@ -78,7 +78,6 @@
 				type="file"
 				accept="video/*"
 				onchange={async (e) => await vidInstance.loadFile(e.currentTarget.files?.[0])}
-				disabled={!vidInstance.isInitialized}
 			/>
 		</label>
 	{/if}

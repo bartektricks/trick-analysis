@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { cn } from '$lib/cn';
 	import Slider from '../Slider.svelte';
 	import { VideoInstance } from './VideoInstance.svelte';
 
@@ -48,6 +47,10 @@
 		}
 
 		e.preventDefault();
+
+		if (document.activeElement instanceof HTMLElement) {
+			document.activeElement.blur();
+		}
 
 		if (e.key === 'ArrowRight') {
 			timelineValue += 1;

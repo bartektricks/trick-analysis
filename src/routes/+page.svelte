@@ -1,15 +1,13 @@
 <script lang="ts">
 	import Slider from '$lib/components/Slider.svelte';
-	import Video, { type VideoProps } from '$lib/components/video/Video.svelte';
+	import Video from '$lib/components/video/Video.svelte';
 	import { Button } from 'bits-ui';
-
-	type VideoState = Omit<VideoProps, 'isTimelineLocked'>;
 
 	const initialVideoState = {
 		currentTime: 0,
 		timelineValue: 0,
 		totalFrames: 0
-	} satisfies VideoState;
+	};
 
 	let areTimelinesLocked = $state(false);
 

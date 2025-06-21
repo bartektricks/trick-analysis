@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import Slider from '../Slider.svelte';
 	import { VideoInstance } from './VideoInstance.svelte';
 
@@ -10,14 +9,11 @@
 	let { isTimelineLocked }: VideoProps = $props();
 
 	let vidInstance = new VideoInstance();
-	let video = $state<HTMLVideoElement>();
 	let currentTime = $state(0);
 	let timelineValue = $state(0);
 	let previousTimelineValue = $state(0);
 
-
 	const handleKeydown = (e: KeyboardEvent) => {
-		if (!video) return;
 		if (!e.shiftKey) {
 			return;
 		}
@@ -40,7 +36,7 @@
 	class="from-background to-background hover:from-background/95 text-foreground relative size-full bg-radial transition-colors"
 >
 	<!-- svelte-ignore a11y_media_has_caption -->
-	<video bind:this={video} src={vidInstance.videoUrl} bind:currentTime class="size-full">
+	<video src={vidInstance.videoUrl} bind:currentTime class="size-full">
 		Your browser does not support the video tag.
 	</video>
 

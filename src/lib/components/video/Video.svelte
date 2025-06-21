@@ -63,7 +63,7 @@
 	class="from-background to-background hover:from-background/95 text-foreground relative size-full bg-radial transition-colors"
 >
 	<!-- svelte-ignore a11y_media_has_caption -->
-	<video src={vidInstance.videoUrl} bind:currentTime class="size-full">
+	<video src={vidInstance.videoUrl} bind:currentTime class="size-full" playsinline>
 		Your browser does not support the video tag.
 	</video>
 
@@ -86,12 +86,9 @@
 		</div>
 	{/if}
 
-	<div
-		class={cn(
-			'absolute right-0 bottom-0 left-0 p-4',
-			!isTimelineLocked && vidInstance.videoUrl ? '' : 'hidden'
-		)}
-	>
-		<Slider type="single" bind:value={timelineValue} min={0} max={vidInstance.totalFrames} />
-	</div>
+	{#if !isTimelineLocked && vidInstance.videoUrl}
+		<div class="absolute right-0 bottom-0 left-0 p-4">
+			<Slider type="single" bind:value={timelineValue} min={0} max={vidInstance.totalFrames} />
+		</div>
+	{/if}
 </div>

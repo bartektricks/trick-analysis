@@ -50,10 +50,8 @@
 		e.preventDefault();
 
 		if (e.key === 'ArrowRight') {
-			currentTime += 1 / vidInstance.frameRate;
 			timelineValue += 1;
 		} else if (e.key === 'ArrowLeft') {
-			currentTime -= 1 / vidInstance.frameRate;
 			timelineValue -= 1;
 		}
 	};
@@ -84,7 +82,7 @@
 
 	{#if vidInstance.isLoading}
 		<div class="bg-card absolute inset-0 flex animate-pulse items-center justify-center">
-			Optimizing video...
+			Loading video...
 		</div>
 	{/if}
 

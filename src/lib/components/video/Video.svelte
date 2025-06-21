@@ -1,17 +1,46 @@
 <script lang="ts">
+	import { cn } from '$lib/cn';
 	import Slider from '../Slider.svelte';
 	import { VideoInstance } from './VideoInstance.svelte';
 
-	interface VideoProps {
+	export interface VideoProps {
 		isTimelineLocked?: boolean;
+		currentTime?: number;
+		timelineValue?: number;
+		totalFrames?: number;
 	}
 
-	let { isTimelineLocked }: VideoProps = $props();
+	let {
+		isTimelineLocked,
+		currentTime = $bindable(0),
+		timelineValue = $bindable(0),
+		totalFrames = $bindable()
+	}: VideoProps = $props();
 
 	let vidInstance = new VideoInstance();
-	let currentTime = $state(0);
-	let timelineValue = $state(0);
 	let previousTimelineValue = $state(0);
+
+	$effect(() => {
+		totalFrames = vidInstance.totalFrames;
+	});
+
+	// Use effect for easier control from outside of the component
+	$effect(() => {
+		const diff = timelineValue - previousTimelineValue;
+
+		if (diff !== 0) {
+			// Apply the same frame-by-frame logic as keydown
+			const steps = Math.abs(diff);
+			const direction = diff > 0 ? 1 : -1;
+
+			// Apply each step individually
+			for (let i = 0; i < steps; i++) {
+				currentTime += direction * (1 / vidInstance.frameRate);
+			}
+
+			previousTimelineValue = timelineValue;
+		}
+	});
 
 	const handleKeydown = (e: KeyboardEvent) => {
 		if (!e.shiftKey) {
@@ -59,31 +88,12 @@
 		</div>
 	{/if}
 
-	{#if !isTimelineLocked && vidInstance.videoUrl}
-		<div class="absolute right-0 bottom-0 left-0 p-4">
-			<Slider
-				type="single"
-				bind:value={timelineValue}
-				onValueChange={(value) => {
-					// Calculate difference in frames
-					const diff = value - previousTimelineValue;
-
-					if (diff !== 0) {
-						// Apply the same frame-by-frame logic as keydown
-						const steps = Math.abs(diff);
-						const direction = diff > 0 ? 1 : -1;
-
-						// Apply each step individually
-						for (let i = 0; i < steps; i++) {
-							currentTime += direction * (1 / vidInstance.frameRate);
-						}
-
-						previousTimelineValue = value;
-					}
-				}}
-				min={0}
-				max={vidInstance.totalFrames}
-			/>
-		</div>
-	{/if}
+	<div
+		class={cn(
+			'absolute right-0 bottom-0 left-0 p-4',
+			!isTimelineLocked && vidInstance.videoUrl ? '' : 'hidden'
+		)}
+	>
+		<Slider type="single" bind:value={timelineValue} min={0} max={vidInstance.totalFrames} />
+	</div>
 </div>

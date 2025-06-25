@@ -1,7 +1,7 @@
 <script lang="ts">
+	import Button from '$lib/components/Button.svelte';
 	import Slider from '$lib/components/Slider.svelte';
 	import Video from '$lib/components/video/Video.svelte';
-	import { Button } from 'bits-ui';
 
 	const initialVideoState = {
 		currentTime: 0,
@@ -37,17 +37,19 @@
 </script>
 
 <nav class="fixed top-4 right-4 z-20 flex items-center gap-2">
-	<Button.Root
+	<Button
 		type="button"
-		class="bg-primary text-primary-foreground cursor-pointer rounded-lg px-2 py-1 text-xs shadow-md"
+		class="text-xs"
+		variant="secondary"
 		onclick={handleToggleLock}
+		disabled={video1.totalFrames === 0 || video2.totalFrames === 0}
 	>
 		{#if areTimelinesLocked}
 			Unlock Timelines
 		{:else}
 			Lock Timelines
 		{/if}
-	</Button.Root>
+	</Button>
 </nav>
 <div class="grid h-screen auto-rows-fr justify-items-center md:grid-cols-2">
 	<Video
@@ -61,6 +63,7 @@
 		bind:timelineValue={video2.timelineValue}
 		bind:totalFrames={video2.totalFrames}
 		isTimelineLocked={areTimelinesLocked}
+		editPosition="right"
 	/>
 
 	{#if areTimelinesLocked}

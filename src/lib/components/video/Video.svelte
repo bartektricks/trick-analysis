@@ -1,23 +1,30 @@
 <script lang="ts">
+	import { Dialog } from 'bits-ui';
 	import Slider from '../Slider.svelte';
 	import { VideoInstance } from './VideoInstance.svelte';
+	import { SquarePen, TimerResetIcon } from '@lucide/svelte';
+	import { cn } from '$lib/cn';
+	import Button, { buttonStyleVariants } from '../Button.svelte';
 
 	export interface VideoProps {
 		isTimelineLocked?: boolean;
 		currentTime?: number;
 		timelineValue?: number;
 		totalFrames?: number;
+		editPosition?: 'left' | 'right';
 	}
 
 	let {
 		isTimelineLocked,
 		currentTime = $bindable(0),
 		timelineValue = $bindable(0),
-		totalFrames = $bindable()
+		totalFrames = $bindable(),
+		editPosition = 'left'
 	}: VideoProps = $props();
 
 	let vidInstance = new VideoInstance();
 	let previousTimelineValue = $state(0);
+	let isDialogOpen = $state(false);
 
 	$effect(() => {
 		totalFrames = vidInstance.totalFrames;
@@ -42,7 +49,7 @@
 	});
 
 	const handleKeydown = (e: KeyboardEvent) => {
-		if (!e.shiftKey) {
+		if (!(e.shiftKey && ['ArrowLeft', 'ArrowRight'].includes(e.key))) {
 			return;
 		}
 
@@ -58,6 +65,10 @@
 			timelineValue -= 1;
 		}
 	};
+
+	const handleToggleDialog = () => {
+		isDialogOpen = !isDialogOpen;
+	};
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -71,12 +82,16 @@
 	</video>
 
 	{#if !vidInstance.isLoading && !vidInstance.videoUrl}
-		<label for="video1" class="absolute inset-0 flex items-center justify-center">
+		<label
+			for={`file-${vidInstance.id}`}
+			class="absolute inset-0 flex cursor-pointer items-center justify-center has-disabled:cursor-progress"
+		>
 			Drag and drop video file here or click to select:
 			<input
-				class="absolute inset-0 size-full cursor-pointer text-transparent disabled:cursor-progress"
+				class="sr-only"
 				type="file"
 				accept="video/*"
+				id={`file-${vidInstance.id}`}
 				onchange={async (e) => await vidInstance.loadFile(e.currentTarget.files?.[0])}
 			/>
 		</label>
@@ -93,4 +108,62 @@
 			<Slider type="single" bind:value={timelineValue} min={0} max={vidInstance.totalFrames} />
 		</div>
 	{/if}
+
+	<Button
+		onclick={handleToggleDialog}
+		variant="secondary"
+		purpose="icon"
+		class={cn('absolute bottom-1/2 translate-y-1/2', {
+			'right-4': editPosition === 'right',
+			'left-4': editPosition === 'left'
+		})}
+	>
+		<SquarePen class="w-5" />
+	</Button>
 </div>
+
+<Dialog.Root bind:open={isDialogOpen}>
+	<Dialog.Portal>
+		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/80" />
+		<Dialog.Content
+			class="bg-background text-popover-foreground fixed top-1/2 left-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-md border p-4 shadow-lg"
+		>
+			<Dialog.Title class="text-lg font-semibold">Video Editor</Dialog.Title>
+			<div class="flex items-center gap-2">
+				<input type="text" bind:value={vidInstance.frameRate} />
+				<Button
+					purpose="icon"
+					onclick={() => (vidInstance.frameRate = vidInstance.originalFrameRate)}
+				>
+					<TimerResetIcon class="w-5" />
+				</Button>
+			</div>
+
+			<label
+				for="file"
+				class={cn(
+					buttonStyleVariants(),
+					'focus-within:ring focus-within:ring-blue-400 focus-within:outline-1 focus-within:outline-white'
+				)}
+			>
+				<input
+					class="sr-only"
+					type="file"
+					accept="video/*"
+					id="file"
+					onchange={async (e) => {
+						await vidInstance.loadFile(e.currentTarget.files?.[0]);
+						isDialogOpen = false;
+					}}
+				/>
+				Change video
+			</label>
+
+			<Dialog.Close>
+				{#snippet child({ props })}
+					<Button {...props}>Close</Button>
+				{/snippet}
+			</Dialog.Close>
+		</Dialog.Content>
+	</Dialog.Portal>
+</Dialog.Root>

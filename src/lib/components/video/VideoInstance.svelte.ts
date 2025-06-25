@@ -6,12 +6,13 @@ import { onDestroy, onMount } from 'svelte';
 import { v7 as uuid7 } from 'uuid';
 
 export class VideoInstance {
+	id = uuid7();
 	totalFrames = $state(0);
 	isLoading = $state(false);
+	originalFrameRate = $state(30); // Default frame rate
 	frameRate = $state(30); // Default frame rate
 	videoUrl = $state<string | null>(null);
 
-	#id = uuid7();
 	#ffmpeg = $state<FFmpeg>();
 	#frameRatePath = this.getPath('framerate.json');
 	#inputPath = this.getPath('input.mp4');
@@ -22,7 +23,11 @@ export class VideoInstance {
 				this.#ffmpeg = await loadFFmpeg();
 
 				this.#ffmpeg.on('progress', ({ progress }) => {
-					console.log(`${this.#id} - Progress: ${progress}%`);
+					console.log(`${this.id} - Progress: ${progress}%`);
+				});
+
+				this.#ffmpeg.on('log', (message) => {
+					console.log(JSON.stringify(message, null, 2));
 				});
 			})();
 
@@ -48,9 +53,15 @@ export class VideoInstance {
 		this.isLoading = true;
 
 		const dir = this.getPath('');
-		await this.#ffmpeg.createDir(dir);
+
+		try {
+			await this.#ffmpeg.listDir(dir);
+		} catch {
+			await this.#ffmpeg.createDir(dir);
+		}
 
 		this.#inputPath = this.getPath(file.name);
+
 		await this.#ffmpeg.writeFile(this.#inputPath, await fetchFile(file));
 
 		const promiseArr = [
@@ -103,7 +114,7 @@ export class VideoInstance {
 	}
 
 	private getPath(fileName: string): string {
-		return `./${this.#id}/${fileName}`;
+		return `./${this.id}/${fileName}`;
 	}
 
 	private async cleanup(): Promise<void> {
@@ -122,6 +133,7 @@ export class VideoInstance {
 			const parsedMetadata = await VideoMetadataSchema.parseAsync(JSON.parse(decodedVideoMetadata));
 
 			this.frameRate = parsedMetadata.streams.map((stream) => stream.r_frame_rate).sort()[0] || 30; // Default to 30 if no valid frame rate found
+			this.originalFrameRate = this.frameRate;
 			this.totalFrames = parsedMetadata.streams.map((stream) => stream.nb_frames).sort()[0] || 0;
 		} catch (e) {
 			console.log(e);

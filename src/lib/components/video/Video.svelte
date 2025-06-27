@@ -1,10 +1,15 @@
 <script lang="ts">
 	import { Dialog } from 'bits-ui';
 	import Slider from '../Slider.svelte';
-	import { VideoInstance } from './VideoInstance.svelte';
 	import { SquarePen, TimerResetIcon } from '@lucide/svelte';
 	import { cn } from '$lib/cn';
 	import Button, { buttonStyleVariants } from '../Button.svelte';
+	import { loadFFmpeg } from '$lib/ffmpeg.svelte';
+	import { VideoMetadataSchema } from '$lib/schemas/VideoMetadataSchema';
+	import { FFmpeg } from '@ffmpeg/ffmpeg';
+	import { fetchFile } from '@ffmpeg/util';
+	import { onMount } from 'svelte';
+	import { v7 as uuid7 } from 'uuid';
 
 	export interface VideoProps {
 		isTimelineLocked?: boolean;
@@ -22,12 +27,136 @@
 		editPosition = 'left'
 	}: VideoProps = $props();
 
-	let vidInstance = new VideoInstance();
+	const id = uuid7();
+	let isLoading = $state(false);
+	let originalFrameRate = $state(30); // Default frame rate
+	let frameRate = $state(30); // Default frame rate
+	let videoUrl = $state<string>();
+
+	let ffmpeg = $state<FFmpeg>();
+
 	let previousTimelineValue = $state(0);
 	let isDialogOpen = $state(false);
 
-	$effect(() => {
-		totalFrames = vidInstance.totalFrames;
+	const getPath = (fileName: string): string => {
+		return `./${id}/${fileName}`;
+	};
+
+	const frameRatePath = getPath('framerate.json');
+	const inputPath = getPath('input.mp4');
+	const baseDir = getPath('');
+	const outputPath = getPath('output.mp4');
+
+	const cleanup = () => {
+		ffmpeg?.deleteDir(baseDir);
+	};
+
+	const updateMetadata = async (): Promise<void> => {
+		if (!ffmpeg) return;
+
+		try {
+			const videoMetadata = await ffmpeg.readFile(frameRatePath);
+
+			const decodedVideoMetadata =
+				typeof videoMetadata === 'string' ? videoMetadata : new TextDecoder().decode(videoMetadata);
+
+			const parsedMetadata = await VideoMetadataSchema.parseAsync(JSON.parse(decodedVideoMetadata));
+
+			frameRate = parsedMetadata.streams.map((stream) => stream.r_frame_rate).sort()[0] || 30; // Default to 30 if no valid frame rate found
+			originalFrameRate = frameRate;
+			totalFrames = parsedMetadata.streams.map((stream) => stream.nb_frames).sort()[0] || 0;
+		} catch (e) {
+			console.log(e);
+			console.log('Failed to parse video metadata. Falling back to default values.');
+		}
+	};
+
+	const loadFile = async (
+		file?: File,
+		settings?:
+			| {
+					trimFrom: string;
+					trimTo: string;
+					optimize: never;
+			  }
+			| { trimFrom: never; trimTo: never; optimize: boolean }
+	): Promise<void> => {
+		if (!ffmpeg || !file) return;
+		isLoading = true;
+
+		try {
+			await ffmpeg.listDir(baseDir);
+		} catch {
+			await ffmpeg.createDir(baseDir);
+		}
+
+		await ffmpeg.writeFile(inputPath, await fetchFile(file));
+
+		const promiseArr = [
+			ffmpeg.ffprobe([
+				'-v',
+				'quiet',
+				'-print_format',
+				'json',
+				'-show_streams',
+				'-select_streams',
+				'v:0',
+				inputPath,
+				'-o',
+				frameRatePath
+			])
+		];
+
+		const trimCmd = settings?.trimFrom ? ['-ss', settings.trimFrom, '-t', settings.trimTo] : [];
+
+		if (settings) {
+			promiseArr.push(
+				ffmpeg.exec([
+					'-i',
+					inputPath,
+					'-movflags',
+					'faststart',
+					'-vcodec',
+					'libx264',
+					'-crf',
+					'23',
+					'-g',
+					'1',
+					'-pix_fmt',
+					'yuv420p',
+					...trimCmd,
+					outputPath
+				])
+			);
+		}
+
+		await Promise.all(promiseArr);
+		await updateMetadata();
+
+		const filePath = settings ? outputPath : inputPath;
+		const data = await ffmpeg.readFile(filePath);
+		const videoBlob = new Blob([data], { type: 'video/mp4' });
+		videoUrl = URL.createObjectURL(videoBlob);
+		isLoading = false;
+		isDialogOpen = false;
+		previousTimelineValue = 0; // Reset timeline value after loading new video
+		timelineValue = 0; // Reset timeline value after loading new video
+	};
+
+	onMount(() => {
+		(async () => {
+			ffmpeg = await loadFFmpeg();
+
+			ffmpeg.on('progress', ({ progress }) => {
+				console.log(`${id} - Progress: ${progress}%`);
+			});
+
+			ffmpeg.on('log', (message) => {
+				console.log(JSON.stringify(message, null, 2));
+			});
+		})();
+
+		return () => cleanup();
 	});
 
 	// Use effect for easier control from outside of the component
@@ -41,7 +170,7 @@
 
 			// Apply each step individually
 			for (let i = 0; i < steps; i++) {
-				currentTime += direction * (1 / vidInstance.frameRate);
+				currentTime += direction * (1 / frameRate);
 			}
 
 			previousTimelineValue = timelineValue;
@@ -77,13 +206,13 @@
 	class="from-background to-background hover:from-background/95 text-foreground relative size-full bg-radial transition-colors"
 >
 	<!-- svelte-ignore a11y_media_has_caption -->
-	<video src={vidInstance.videoUrl} bind:currentTime class="size-full" playsinline>
+	<video src={videoUrl} bind:currentTime class="size-full" playsinline>
 		Your browser does not support the video tag.
 	</video>
 
-	{#if !vidInstance.isLoading && !vidInstance.videoUrl}
+	{#if !isLoading && !videoUrl}
 		<label
-			for={`file-${vidInstance.id}`}
+			for={`file-${id}`}
 			class="absolute inset-0 flex cursor-pointer items-center justify-center has-disabled:cursor-progress"
 		>
 			Drag and drop video file here or click to select:
@@ -91,35 +220,36 @@
 				class="sr-only"
 				type="file"
 				accept="video/*"
-				id={`file-${vidInstance.id}`}
-				onchange={async (e) => await vidInstance.loadFile(e.currentTarget.files?.[0])}
+				id={`file-${id}`}
+				onchange={async (e) => {
+					await loadFile(e.currentTarget.files?.[0]);
+				}}
 			/>
 		</label>
 	{/if}
 
-	{#if vidInstance.isLoading}
+	{#if isLoading}
 		<div class="bg-card absolute inset-0 flex animate-pulse items-center justify-center">
 			Loading video...
 		</div>
 	{/if}
 
-	{#if !isTimelineLocked && vidInstance.videoUrl}
+	{#if !isTimelineLocked && videoUrl}
 		<div class="absolute right-0 bottom-0 left-0 p-4">
-			<Slider type="single" bind:value={timelineValue} min={0} max={vidInstance.totalFrames} />
+			<Slider type="single" bind:value={timelineValue} min={0} max={totalFrames} />
 		</div>
+		<Button
+			onclick={handleToggleDialog}
+			variant="secondary"
+			purpose="icon"
+			class={cn('absolute bottom-1/2 translate-y-1/2', {
+				'right-4': editPosition === 'right',
+				'left-4': editPosition === 'left'
+			})}
+		>
+			<SquarePen class="w-5" />
+		</Button>
 	{/if}
-
-	<Button
-		onclick={handleToggleDialog}
-		variant="secondary"
-		purpose="icon"
-		class={cn('absolute bottom-1/2 translate-y-1/2', {
-			'right-4': editPosition === 'right',
-			'left-4': editPosition === 'left'
-		})}
-	>
-		<SquarePen class="w-5" />
-	</Button>
 </div>
 
 <Dialog.Root bind:open={isDialogOpen}>
@@ -130,11 +260,8 @@
 		>
 			<Dialog.Title class="text-lg font-semibold">Video Editor</Dialog.Title>
 			<div class="flex items-center gap-2">
-				<input type="text" bind:value={vidInstance.frameRate} />
-				<Button
-					purpose="icon"
-					onclick={() => (vidInstance.frameRate = vidInstance.originalFrameRate)}
-				>
+				<input type="text" bind:value={frameRate} />
+				<Button purpose="icon" onclick={() => (frameRate = originalFrameRate)}>
 					<TimerResetIcon class="w-5" />
 				</Button>
 			</div>
@@ -152,8 +279,7 @@
 					accept="video/*"
 					id="file"
 					onchange={async (e) => {
-						await vidInstance.loadFile(e.currentTarget.files?.[0]);
-						isDialogOpen = false;
+						await loadFile(e.currentTarget.files?.[0]);
 					}}
 				/>
 				Change video

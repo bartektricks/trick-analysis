@@ -10,6 +10,7 @@
 	import { fetchFile } from '@ffmpeg/util';
 	import { onMount } from 'svelte';
 	import { v7 as uuid7 } from 'uuid';
+	import VideoDialog from './VideoDialog.svelte';
 
 	export interface VideoProps {
 		isTimelineLocked?: boolean;
@@ -98,6 +99,16 @@
 
 		await updateMetadata();
 
+		await setVideoUrl(inputPath);
+	};
+
+	const setVideoUrl = async (inputPath: string): void => {
+		if (!ffmpeg) return;
+
+		if (videoUrl) {
+			URL.revokeObjectURL(videoUrl);
+		}
+
 		const data = await ffmpeg.readFile(inputPath);
 		const videoBlob = new Blob([data], { type: 'video/mp4' });
 		videoUrl = URL.createObjectURL(videoBlob);
@@ -133,11 +144,7 @@
 			outputPath
 		]);
 
-		const data = await ffmpeg.readFile(outputPath);
-		const videoBlob = new Blob([data], { type: 'video/mp4' });
-		videoUrl = URL.createObjectURL(videoBlob);
-
-		resetState();
+		await setVideoUrl(outputPath);
 	};
 
 	onMount(() => {
@@ -255,50 +262,11 @@
 	{/if}
 </div>
 
-<Dialog.Root bind:open={isDialogOpen}>
-	<Dialog.Portal>
-		<Dialog.Overlay class="fixed inset-0 z-50 bg-black/80" />
-		<Dialog.Content
-			class="bg-background text-popover-foreground fixed top-1/2 left-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-md border p-4 shadow-lg"
-		>
-			<Dialog.Title class="text-lg font-semibold">Video Editor</Dialog.Title>
-			<div class="flex items-center gap-2">
-				<input disabled={isLoading}  type="text" bind:value={frameRate} />
-				<Button disabled={isLoading} purpose="icon" onclick={() => (frameRate = originalFrameRate)}>
-					<TimerResetIcon class="w-5" />
-				</Button>
-			</div>
-
-			<Button onclick={optimizeFile} disabled={!videoUrl || isLoading} class="mt-4">
-				Optimize video
-			</Button>
-
-			<label
-				for="file"
-				class={cn(
-					buttonStyleVariants(),
-					'focus-within:ring focus-within:ring-blue-400 focus-within:outline-1 focus-within:outline-white'
-				)}
-				aria-disabled={isLoading ? 'true' : 'false'}
-			>
-				<input
-					class="sr-only"
-					type="file"
-					accept="video/*"
-					id="file"
-					onchange={async (e) => {
-						await loadFile(e.currentTarget.files?.[0]);
-					}}
-					disabled={isLoading}
-				/>
-				Change video
-			</label>
-
-			<Dialog.Close>
-				{#snippet child({ props })}
-					<Button {...props}>Close</Button>
-				{/snippet}
-			</Dialog.Close>
-		</Dialog.Content>
-	</Dialog.Portal>
-</Dialog.Root>
+<VideoDialog
+	bind:isDialogOpen
+	disabled={isLoading || !videoUrl}
+	bind:frameRate
+	{originalFrameRate}
+	{optimizeFile}
+	{loadFile}
+/>

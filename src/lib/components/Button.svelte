@@ -1,4 +1,4 @@
-<script module>
+<script module lang="ts">
 	export type ButtonVariants = {
 		variant?: 'primary' | 'secondary' | 'tertiary';
 		purpose?: 'default' | 'icon';

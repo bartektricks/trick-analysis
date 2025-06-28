@@ -1,9 +1,8 @@
 <script lang="ts">
-	import { Dialog } from 'bits-ui';
 	import Slider from '../Slider.svelte';
-	import { SquarePen, TimerResetIcon } from '@lucide/svelte';
+	import { SquarePen } from '@lucide/svelte';
 	import { cn } from '$lib/cn';
-	import Button, { buttonStyleVariants } from '../Button.svelte';
+	import Button from '../Button.svelte';
 	import { loadFFmpeg } from '$lib/ffmpeg.svelte';
 	import { VideoMetadataSchema } from '$lib/schemas/VideoMetadataSchema';
 	import { FFmpeg } from '@ffmpeg/ffmpeg';
@@ -11,6 +10,7 @@
 	import { onMount } from 'svelte';
 	import { v7 as uuid7 } from 'uuid';
 	import VideoDialog from './VideoDialog.svelte';
+	import { DEFAULT_FRAME_RATE } from '$lib/constants';
 
 	export interface VideoProps {
 		isTimelineLocked?: boolean;
@@ -30,8 +30,8 @@
 
 	const id = uuid7();
 	let isLoading = $state(false);
-	let originalFrameRate = $state(30); // Default frame rate
-	let frameRate = $state(30); // Default frame rate
+	let originalFrameRate = $state(DEFAULT_FRAME_RATE); // Default frame rate
+	let frameRate = $state(DEFAULT_FRAME_RATE); // Default frame rate
 	let videoUrl = $state<string>();
 
 	let ffmpeg = $state<FFmpeg>();
@@ -63,7 +63,8 @@
 
 			const parsedMetadata = await VideoMetadataSchema.parseAsync(JSON.parse(decodedVideoMetadata));
 
-			frameRate = parsedMetadata.streams.map((stream) => stream.r_frame_rate).sort()[0] || 30; // Default to 30 if no valid frame rate found
+			frameRate =
+				parsedMetadata.streams.map((stream) => stream.r_frame_rate).sort()[0] || DEFAULT_FRAME_RATE; // Default to DEFAULT_FRAME_RATE if no valid frame rate found
 			originalFrameRate = frameRate;
 			totalFrames = parsedMetadata.streams.map((stream) => stream.nb_frames).sort()[0] || 0;
 		} catch (e) {
@@ -100,9 +101,10 @@
 		await updateMetadata();
 
 		await setVideoUrl(inputPath);
+		resetState();
 	};
 
-	const setVideoUrl = async (inputPath: string): void => {
+	const setVideoUrl = async (inputPath: string): Promise<void> => {
 		if (!ffmpeg) return;
 
 		if (videoUrl) {
@@ -112,8 +114,6 @@
 		const data = await ffmpeg.readFile(inputPath);
 		const videoBlob = new Blob([data], { type: 'video/mp4' });
 		videoUrl = URL.createObjectURL(videoBlob);
-
-		resetState();
 	};
 
 	const resetState = () => {
@@ -145,6 +145,7 @@
 		]);
 
 		await setVideoUrl(outputPath);
+		resetState();
 	};
 
 	onMount(() => {
@@ -207,8 +208,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <div
-	class="from-background to-background hover:from-background/95 text-foreground relative size-full bg-radial transition-colors"
->
+	class="from-background to-background hover:from-background/95 text-foreground relative size-full bg-radial transition-colors">
 	<!-- svelte-ignore a11y_media_has_caption -->
 	<video src={videoUrl} bind:currentTime class="size-full" playsinline>
 		Your browser does not support the video tag.
@@ -217,8 +217,7 @@
 	{#if !isLoading && !videoUrl}
 		<label
 			for={`file-${id}`}
-			class="absolute inset-0 flex cursor-pointer items-center justify-center has-disabled:cursor-progress"
-		>
+			class="absolute inset-0 flex cursor-pointer items-center justify-center has-disabled:cursor-progress">
 			Drag and drop video file here or click to select:
 			<input
 				class="sr-only"
@@ -227,8 +226,7 @@
 				id={`file-${id}`}
 				onchange={async (e) => {
 					await loadFile(e.currentTarget.files?.[0]);
-				}}
-			/>
+				}} />
 		</label>
 	{/if}
 
@@ -245,8 +243,7 @@
 				type="single"
 				bind:value={timelineValue}
 				min={0}
-				max={totalFrames}
-			/>
+				max={totalFrames} />
 		</div>
 		<Button
 			onclick={handleToggleDialog}
@@ -255,8 +252,7 @@
 			class={cn('absolute bottom-1/2 translate-y-1/2', {
 				'right-4': editPosition === 'right',
 				'left-4': editPosition === 'left'
-			})}
-		>
+			})}>
 			<SquarePen class="w-5" />
 		</Button>
 	{/if}
@@ -268,5 +264,4 @@
 	bind:frameRate
 	{originalFrameRate}
 	{optimizeFile}
-	{loadFile}
-/>
+	{loadFile} />

@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { isFFmpegLoaded, loadFFmpeg } from '$lib/ffmpeg.svelte';
 	import { onMount } from 'svelte';
-	import '../app.css';
 	import { Tooltip } from 'bits-ui';
+	import '../app.css';
 
 	let { children } = $props();
 

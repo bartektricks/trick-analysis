@@ -3,7 +3,6 @@
 	import Slider from '$lib/components/Slider.svelte';
 	import Tooltip from '$lib/components/Tooltip.svelte';
 	import Video from '$lib/components/video/Video.svelte';
-	import { GithubIcon } from '@lucide/svelte';
 
 	const initialVideoState = {
 		currentTime: 0,
@@ -47,8 +46,7 @@
 				variant="secondary"
 				onclick={handleToggleLock}
 				disabled={video1.totalFrames === 0 || video2.totalFrames === 0}
-				{...props}
-			>
+				{...props}>
 				{#if areTimelinesLocked}
 					Unlock Timelines
 				{:else}
@@ -65,15 +63,13 @@
 		bind:currentTime={video1.currentTime}
 		bind:timelineValue={video1.timelineValue}
 		bind:totalFrames={video1.totalFrames}
-		isTimelineLocked={areTimelinesLocked}
-	/>
+		isTimelineLocked={areTimelinesLocked} />
 	<Video
 		bind:currentTime={video2.currentTime}
 		bind:timelineValue={video2.timelineValue}
 		bind:totalFrames={video2.totalFrames}
 		isTimelineLocked={areTimelinesLocked}
-		editPosition="right"
-	/>
+		editPosition="right" />
 
 	{#if areTimelinesLocked}
 		<Slider
@@ -81,7 +77,6 @@
 			min={0}
 			max={maxFrames}
 			bind:value={timelineValue}
-			onValueChange={onTimelineValueChange}
-		/>
+			onValueChange={onTimelineValueChange} />
 	{/if}
 </div>

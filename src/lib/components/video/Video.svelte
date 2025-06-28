@@ -71,16 +71,7 @@
 		}
 	};
 
-	const loadFile = async (
-		file?: File,
-		settings?:
-			| {
-					trimFrom: string;
-					trimTo: string;
-					optimize: never;
-			  }
-			| { trimFrom: never; trimTo: never; optimize: boolean }
-	): Promise<void> => {
+	const loadFile = async (file?: File): Promise<void> => {
 		if (!ffmpeg || !file) return;
 		isLoading = true;
 
@@ -92,55 +83,61 @@
 
 		await ffmpeg.writeFile(inputPath, await fetchFile(file));
 
-		const promiseArr = [
-			ffmpeg.ffprobe([
-				'-v',
-				'quiet',
-				'-print_format',
-				'json',
-				'-show_streams',
-				'-select_streams',
-				'v:0',
-				inputPath,
-				'-o',
-				frameRatePath
-			])
-		];
+		await ffmpeg.ffprobe([
+			'-v',
+			'quiet',
+			'-print_format',
+			'json',
+			'-show_streams',
+			'-select_streams',
+			'v:0',
+			inputPath,
+			'-o',
+			frameRatePath
+		]);
 
-		const trimCmd = settings?.trimFrom ? ['-ss', settings.trimFrom, '-t', settings.trimTo] : [];
-
-		if (settings) {
-			promiseArr.push(
-				ffmpeg.exec([
-					'-i',
-					inputPath,
-					'-movflags',
-					'faststart',
-					'-vcodec',
-					'libx264',
-					'-crf',
-					'23',
-					'-g',
-					'1',
-					'-pix_fmt',
-					'yuv420p',
-					...trimCmd,
-					outputPath
-				])
-			);
-		}
-
-		await Promise.all(promiseArr);
 		await updateMetadata();
 
-		const filePath = settings ? outputPath : inputPath;
-		const data = await ffmpeg.readFile(filePath);
+		const data = await ffmpeg.readFile(inputPath);
 		const videoBlob = new Blob([data], { type: 'video/mp4' });
 		videoUrl = URL.createObjectURL(videoBlob);
+
+		resetState();
+	};
+
+	const resetState = () => {
 		isLoading = false;
+		currentTime = 0;
+		timelineValue = 0;
+		previousTimelineValue = 0;
 		isDialogOpen = false;
-		previousTimelineValue = 0; // Reset timeline value after loading new video
-		timelineValue = 0; // Reset timeline value after loading new video
+	};
+
+	const optimizeFile = async (): Promise<void> => {
+		if (!ffmpeg || !videoUrl) return;
+		isLoading = true;
+
+		await ffmpeg.exec([
+			'-i',
+			inputPath,
+			'-movflags',
+			'faststart',
+			'-vcodec',
+			'libx264',
+			'-crf',
+			'23',
+			'-g',
+			'1',
+			'-pix_fmt',
+			'yuv420p',
+			outputPath
+		]);
+
+		const data = await ffmpeg.readFile(outputPath);
+		const videoBlob = new Blob([data], { type: 'video/mp4' });
+		videoUrl = URL.createObjectURL(videoBlob);
+
+		resetState();
 	};
 
 	onMount(() => {
@@ -236,7 +233,13 @@
 
 	{#if !isTimelineLocked && videoUrl}
 		<div class="absolute right-0 bottom-0 left-0 p-4">
-			<Slider type="single" bind:value={timelineValue} min={0} max={totalFrames} />
+			<Slider
+				disabled={isLoading}
+				type="single"
+				bind:value={timelineValue}
+				min={0}
+				max={totalFrames}
+			/>
 		</div>
 		<Button
 			onclick={handleToggleDialog}
@@ -260,11 +263,15 @@
 		>
 			<Dialog.Title class="text-lg font-semibold">Video Editor</Dialog.Title>
 			<div class="flex items-center gap-2">
-				<input type="text" bind:value={frameRate} />
-				<Button purpose="icon" onclick={() => (frameRate = originalFrameRate)}>
+				<input disabled={isLoading}  type="text" bind:value={frameRate} />
+				<Button disabled={isLoading} purpose="icon" onclick={() => (frameRate = originalFrameRate)}>
 					<TimerResetIcon class="w-5" />
 				</Button>
 			</div>
+
+			<Button onclick={optimizeFile} disabled={!videoUrl || isLoading} class="mt-4">
+				Optimize video
+			</Button>
 
 			<label
 				for="file"
@@ -272,6 +279,7 @@
 					buttonStyleVariants(),
 					'focus-within:ring focus-within:ring-blue-400 focus-within:outline-1 focus-within:outline-white'
 				)}
+				aria-disabled={isLoading ? 'true' : 'false'}
 			>
 				<input
 					class="sr-only"
@@ -281,6 +289,7 @@
 					onchange={async (e) => {
 						await loadFile(e.currentTarget.files?.[0]);
 					}}
+					disabled={isLoading}
 				/>
 				Change video
 			</label>

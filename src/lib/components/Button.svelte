@@ -9,7 +9,7 @@
 		purpose = 'default'
 	}: ButtonVariants | undefined = {}) =>
 		cn(
-			'bg-primary text-primary-foreground hover:bg-accent hover:text-accent-foreground inline-flex cursor-pointer items-center justify-center gap-2 rounded-md px-2 py-1 whitespace-nowrap shadow transition-colors disabled:pointer-events-none disabled:opacity-50 [&_svg]:shrink-0',
+			'bg-primary text-primary-foreground hover:bg-accent hover:text-accent-foreground inline-flex cursor-pointer items-center justify-center gap-2 rounded-md px-2 py-1 whitespace-nowrap shadow transition-colors disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&_svg]:shrink-0',
 			{
 				'bg-primary text-primary-foreground hover:bg-accent hover:text-accent-foreground':
 					variant === 'primary',

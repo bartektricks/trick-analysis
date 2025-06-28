@@ -1,7 +1,9 @@
 <script lang="ts">
 	import Button from '$lib/components/Button.svelte';
 	import Slider from '$lib/components/Slider.svelte';
+	import Tooltip from '$lib/components/Tooltip.svelte';
 	import Video from '$lib/components/video/Video.svelte';
+	import { GithubIcon } from '@lucide/svelte';
 
 	const initialVideoState = {
 		currentTime: 0,
@@ -36,20 +38,27 @@
 	};
 </script>
 
-<nav class="fixed top-4 right-4 z-20 flex items-center gap-2">
-	<Button
-		type="button"
-		class="text-xs"
-		variant="secondary"
-		onclick={handleToggleLock}
-		disabled={video1.totalFrames === 0 || video2.totalFrames === 0}
-	>
-		{#if areTimelinesLocked}
-			Unlock Timelines
-		{:else}
-			Lock Timelines
-		{/if}
-	</Button>
+<nav class="fixed top-4 right-4 z-20 flex items-center gap-4">
+	<Tooltip>
+		{#snippet trigger(props)}
+			<Button
+				type="button"
+				class="text-xs"
+				variant="secondary"
+				onclick={handleToggleLock}
+				disabled={video1.totalFrames === 0 || video2.totalFrames === 0}
+				{...props}
+			>
+				{#if areTimelinesLocked}
+					Unlock Timelines
+				{:else}
+					Lock Timelines
+				{/if}
+			</Button>
+		{/snippet}
+
+		<div>Toggle timeline to lock both videos to the same position</div>
+	</Tooltip>
 </nav>
 <div class="grid h-screen auto-rows-fr justify-items-center md:grid-cols-2">
 	<Video

@@ -12,6 +12,9 @@
 	import VideoDialog from './VideoDialog.svelte';
 	import { DEFAULT_FRAME_RATE } from '$lib/constants';
 
+	const hasRequestVideoFrameCallback =
+		'requestVideoFrameCallback' in HTMLVideoElement.prototype;
+
 	export interface VideoProps {
 		isTimelineLocked?: boolean;
 		currentTime?: number;
@@ -30,14 +33,19 @@
 
 	const id = uuid7();
 	let isLoading = $state(false);
-	let originalFrameRate = $state(DEFAULT_FRAME_RATE); // Default frame rate
-	let frameRate = $state(DEFAULT_FRAME_RATE); // Default frame rate
+	let originalFrameRate = $state(DEFAULT_FRAME_RATE);
+	let frameRate = $state(DEFAULT_FRAME_RATE);
 	let videoUrl = $state<string>();
 
 	let ffmpeg = $state<FFmpeg>();
 
 	let previousTimelineValue = $state(0);
 	let isDialogOpen = $state(false);
+
+	// Canvas and video refs
+	let canvasElement = $state<HTMLCanvasElement>();
+	let videoElement = $state<HTMLVideoElement>();
+	let ctx = $state<CanvasRenderingContext2D | null>(null);
 
 	const getPath = (fileName: string): string => {
 		return `./${id}/${fileName}`;
@@ -64,7 +72,7 @@
 			const parsedMetadata = await VideoMetadataSchema.parseAsync(JSON.parse(decodedVideoMetadata));
 
 			frameRate =
-				parsedMetadata.streams.map((stream) => stream.r_frame_rate).sort()[0] || DEFAULT_FRAME_RATE; // Default to DEFAULT_FRAME_RATE if no valid frame rate found
+				parsedMetadata.streams.map((stream) => stream.r_frame_rate).sort()[0] || DEFAULT_FRAME_RATE;
 			originalFrameRate = frameRate;
 			totalFrames = parsedMetadata.streams.map((stream) => stream.nb_frames).sort()[0] || 0;
 		} catch (e) {
@@ -128,6 +136,7 @@
 		if (!ffmpeg || !videoUrl) return;
 		isLoading = true;
 
+
 		await ffmpeg.exec([
 			'-i',
 			inputPath,
@@ -148,6 +157,78 @@
 		resetState();
 	};
 
+	// Canvas rendering logic
+	const updateCanvas = () => {
+		if (!ctx || !videoElement || !canvasElement) return;
+
+		// Clear canvas and draw video frame
+		ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+		// Get video dimensions
+		const videoWidth = videoElement.videoWidth;
+		const videoHeight = videoElement.videoHeight;
+
+		if (videoWidth === 0 || videoHeight === 0) return;
+
+		// Calculate aspect ratios
+		const canvasAspect = canvasElement.width / canvasElement.height;
+		const videoAspect = videoWidth / videoHeight;
+
+		let drawWidth, drawHeight, offsetX, offsetY;
+
+		if (videoAspect > canvasAspect) {
+			// Video is wider than canvas - fit to width
+			drawWidth = canvasElement.width;
+			drawHeight = canvasElement.width / videoAspect;
+			offsetX = 0;
+			offsetY = (canvasElement.height - drawHeight) / 2;
+		} else {
+			// Video is taller than canvas - fit to height
+			drawWidth = canvasElement.height * videoAspect;
+			drawHeight = canvasElement.height;
+			offsetX = (canvasElement.width - drawWidth) / 2;
+			offsetY = 0;
+		}
+
+		// Draw video frame with proper aspect ratio and centering
+		ctx.drawImage(videoElement, offsetX, offsetY, drawWidth, drawHeight);
+
+		// Update current time from video element
+		currentTime = videoElement.currentTime;
+
+		// Continue the animation loop
+		if (hasRequestVideoFrameCallback) {
+			videoElement.requestVideoFrameCallback(updateCanvas);
+		}
+	};
+
+	const initializeCanvas = () => {
+		if (!canvasElement || !videoElement) return;
+
+		ctx = canvasElement.getContext('2d');
+
+		// Set canvas size to match container
+		const resizeCanvas = () => {
+			if (!canvasElement) return;
+
+			const rect = canvasElement.getBoundingClientRect();
+			canvasElement.width = rect.width;
+			canvasElement.height = rect.height;
+		};
+
+		resizeCanvas();
+		window.addEventListener('resize', resizeCanvas);
+
+		// Start the frame callback loop
+		if (hasRequestVideoFrameCallback) {
+			videoElement.requestVideoFrameCallback(updateCanvas);
+		}
+
+		return () => {
+			window.removeEventListener('resize', resizeCanvas);
+		};
+	};
+
 	onMount(() => {
 		(async () => {
 			ffmpeg = await loadFFmpeg();
@@ -161,21 +242,27 @@
 			});
 		})();
 
-		return () => cleanup();
+		const canvasCleanup = initializeCanvas();
+
+		return () => {
+			cleanup();
+			canvasCleanup?.();
+		};
 	});
 
 	// Use effect for easier control from outside of the component
 	$effect(() => {
 		const diff = timelineValue - previousTimelineValue;
 
-		if (diff !== 0) {
+		if (diff !== 0 && videoElement) {
 			// Apply the same frame-by-frame logic as keydown
 			const steps = Math.abs(diff);
 			const direction = diff > 0 ? 1 : -1;
 
 			// Apply each step individually
 			for (let i = 0; i < steps; i++) {
-				currentTime += direction * (1 / frameRate);
+				const newTime = videoElement.currentTime + direction * (1 / frameRate);
+				videoElement.currentTime = Math.max(0, Math.min(newTime, videoElement.duration || 0));
 			}
 
 			previousTimelineValue = timelineValue;
@@ -209,10 +296,22 @@
 
 <div
 	class="from-background to-background hover:from-background/95 text-foreground relative size-full bg-radial transition-colors">
+	<!-- Hidden video element for playback control -->
+	<!-- eslint-disable-next-line svelte/no-unused-svelte-ignore -->
 	<!-- svelte-ignore a11y_media_has_caption -->
-	<video src={videoUrl} bind:currentTime class="size-full" playsinline>
+	<video
+		bind:this={videoElement}
+		src={videoUrl}
+		class={hasRequestVideoFrameCallback ? 'sr-only' : 'size-full'}
+		playsinline
+		muted>
 		Your browser does not support the video tag.
 	</video>
+
+	<!-- Canvas for rendering -->
+	{#if hasRequestVideoFrameCallback}
+		<canvas bind:this={canvasElement} class="size-full" style="object-fit: contain;"> </canvas>
+	{/if}
 
 	{#if !isLoading && !videoUrl}
 		<label

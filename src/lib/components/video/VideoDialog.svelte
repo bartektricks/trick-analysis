@@ -47,11 +47,11 @@
 							<Tooltip>
 								{#snippet trigger(props)}
 									<Button
+										{...props}
 										{disabled}
 										class="p-3"
 										purpose="icon"
-										onclick={() => (frameRate = originalFrameRate)}
-										{...props}>
+										onclick={() => (frameRate = originalFrameRate)}>
 										<TimerResetIcon class="size-4" />
 									</Button>
 								{/snippet}
@@ -63,7 +63,7 @@
 
 					<Tooltip>
 						{#snippet trigger(props)}
-							<Button onclick={optimizeFile} {disabled} class="w-full" {...props}>
+							<Button {...props} onclick={optimizeFile} {disabled} class="w-full">
 								Optimize video
 							</Button>
 						{/snippet}

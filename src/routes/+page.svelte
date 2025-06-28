@@ -41,12 +41,12 @@
 	<Tooltip>
 		{#snippet trigger(props)}
 			<Button
+				{...props}
 				type="button"
 				class="text-xs"
 				variant="secondary"
 				onclick={handleToggleLock}
-				disabled={video1.totalFrames === 0 || video2.totalFrames === 0}
-				{...props}>
+				disabled={video1.totalFrames === 0 || video2.totalFrames === 0}>
 				{#if areTimelinesLocked}
 					Unlock Timelines
 				{:else}
